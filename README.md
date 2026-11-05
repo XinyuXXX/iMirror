@@ -54,7 +54,7 @@ the code and verify that yourself.
 
 ## Download
 
-The latest AirPlay + Miracast beta is available from **[GitHub Releases](https://github.com/XinyuXXX/iMirror/releases)**.
+The latest AirPlay + Miracast release is available from **[GitHub Releases](https://github.com/XinyuXXX/iMirror/releases)**.
 
 Prebuilt, release-signed APKs from earlier versions are also committed in **[`apk/`](apk/)** — no build required.
 
@@ -74,7 +74,7 @@ Enable **Developer options → USB debugging** on the TV, then from a computer:
 
 ```sh
 adb connect <your-tv-ip>
-adb install -r iMirror-1.1.0-beta.2-universal.apk
+adb install -r iMirror-1.1.0-universal.apk
 ```
 
 No computer? Use a sideloading app such as *Downloader* or *Send Files to TV* to

@@ -11,6 +11,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-11-05
+
+### Added
+
+- AirPlay and no-root Miracast/Wi-Fi Display reception in one Android TV app, including WFD RTSP, RTP/MPEG-TS, H.264 video and AAC/LPCM audio.
+- Miracast setting, runtime Wi-Fi Direct permissions, Home status and shared Surface rendering.
+- Unified last-wins handoff between AirPlay and Miracast senders.
+
+### Changed
+
+- Default receiver name is `iMirror`, and Home reads the configured display name.
+
+### Fixed
+
+- Sony KD-65X9500H / Android 10 MTK decoder compatibility by guarding the optional low-latency key.
+- mDNS listener/generation leaks and independent AirPlay/RAOP cleanup after repeated restarts and protocol switching.
+- WFD response validation, RTP bind/teardown and decoder resource cleanup.
+
+### Validation
+
+- Full JVM unit-test suite passes.
+- Huawei Pura X / HarmonyOS 7 Miracast video and audio, Mac AirPlay, protocol handoff, default iMirror naming and repeated-restart recovery were exercised on Sony KD-65X9500H. HDCP/DRM and UIBC remain outside this release's Miracast scope.
+
+---
+
 ## [1.1.0-beta.2] - 2026-11-05
 
 ### Changed
