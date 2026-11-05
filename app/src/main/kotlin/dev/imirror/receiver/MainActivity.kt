@@ -16,11 +16,13 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import dev.imirror.receiver.service.ActiveConnection
 import dev.imirror.receiver.service.MirrorService
 import dev.imirror.receiver.service.PhotoFrame
-import dev.imirror.receiver.service.ProtocolState
+import dev.imirror.receiver.service.Protocol
 import dev.imirror.receiver.service.ServiceController
 import dev.imirror.receiver.airplay.NowPlayingInfo
+import dev.imirror.receiver.miracast.MiracastReceiver
 import dev.imirror.receiver.ui.HomeFragment
 import dev.imirror.receiver.ui.NowPlayingScreen
 import dev.imirror.receiver.ui.PhotoScreen
@@ -66,10 +68,11 @@ class MainActivity : AppCompatActivity() {
     // Service binding — gives access to state flows for showing/hiding the streaming overlay
     private var service: MirrorService? = null
     private var isBound = false
-    private var currentAirPlayState = ProtocolState.DISABLED
+    private var currentActiveConnection: ActiveConnection? = null
     private var currentPhotoFrame: PhotoFrame? = null
     private var currentNowPlaying: NowPlayingInfo? = null
     private var currentPin: String? = null
+    private var miracastPermissionsMissingAtRequest = false
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -111,8 +114,8 @@ class MainActivity : AppCompatActivity() {
         // Start the service immediately so it's running before any sender discovers us
         ServiceController.start(this)
 
-        // Android 13+ requires an explicit runtime grant for POST_NOTIFICATIONS
-        requestNotificationPermission()
+        // Ask once for the runtime grants required on this API level.
+        requestRuntimePermissions()
     }
 
     override fun onStart() {
@@ -240,6 +243,7 @@ class MainActivity : AppCompatActivity() {
         pinScreen.visibility = View.GONE
         streamingScreen.visibility = View.VISIBLE
         streamingContainer.visibility = View.VISIBLE
+        streamingContainer.keepScreenOn = true
         streamingContainer.bringToFront()
     }
 
@@ -250,6 +254,7 @@ class MainActivity : AppCompatActivity() {
             pinScreen.visibility = View.GONE
             photoScreen.visibility = View.VISIBLE
             streamingContainer.visibility = View.VISIBLE
+            streamingContainer.keepScreenOn = false
             streamingContainer.bringToFront()
         }
     }
@@ -262,6 +267,7 @@ class MainActivity : AppCompatActivity() {
         pinScreen.visibility = View.GONE
         nowPlayingScreen.visibility = View.VISIBLE
         streamingContainer.visibility = View.VISIBLE
+        streamingContainer.keepScreenOn = false
         streamingContainer.bringToFront()
     }
 
@@ -276,6 +282,7 @@ class MainActivity : AppCompatActivity() {
         nowPlayingScreen.visibility = View.GONE
         pinScreen.visibility = View.GONE
         streamingScreen.visibility = View.VISIBLE
+        streamingContainer.keepScreenOn = false
         streamingContainer.visibility = View.GONE
     }
 
@@ -288,7 +295,8 @@ class MainActivity : AppCompatActivity() {
      * false for other keys so normal navigation is unaffected.
      */
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
-        val overlayActive = currentNowPlaying != null || currentAirPlayState == ProtocolState.CONNECTED
+        val overlayActive = currentNowPlaying != null ||
+            currentActiveConnection?.protocol == Protocol.AIRPLAY
         if (overlayActive) {
             val command = when (keyCode) {
                 android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
@@ -311,33 +319,64 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    /**
-     * Requests POST_NOTIFICATIONS permission on Android 13+ (API 33+).
-     * On older versions the permission is granted automatically with the manifest declaration.
-     */
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this, android.Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    PERMISSION_REQUEST_NOTIFICATIONS
-                )
+    /** Combines notification and Wi-Fi Direct grants so Android 13+ shows only one request flow. */
+    private fun requestRuntimePermissions() {
+        val miracastPermissions = MiracastReceiver.requiredPermissions()
+        miracastPermissionsMissingAtRequest = miracastPermissions.any {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        val required = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(android.Manifest.permission.POST_NOTIFICATIONS)
             }
+            addAll(miracastPermissions)
+        }
+        val missing = required.distinct().filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                missing.toTypedArray(),
+                PERMISSION_REQUEST_RUNTIME
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val shouldRestart = requestCode == PERMISSION_REQUEST_RUNTIME &&
+            shouldRestartForMiracastPermissionChange(
+                miracastPermissionsMissingAtRequest,
+                MiracastReceiver.hasRequiredPermissions(this)
+            )
+        miracastPermissionsMissingAtRequest = false
+        if (shouldRestart) {
+            // The service may already have reported ERROR before the runtime grant arrived.
+            ServiceController.restart(this)
         }
     }
 
     companion object {
-        private const val PERMISSION_REQUEST_NOTIFICATIONS = 1001
+        private const val PERMISSION_REQUEST_RUNTIME = 1001
+
+        internal fun shouldRestartForMiracastPermissionChange(
+            wereMissing: Boolean,
+            nowGranted: Boolean
+        ): Boolean = wereMissing && nowGranted
+
+        internal fun isMiracastVideoActive(connection: ActiveConnection?): Boolean =
+            connection?.protocol == Protocol.MIRACAST
     }
 
     // ─── Streaming overlay ────────────────────────────────────────────────────
 
     /**
-     * Observes [MirrorService.airPlayState] and [MirrorService.photoFrame]
+     * Observes [MirrorService.activeConnection] and [MirrorService.photoFrame]
      * and shows the appropriate full-screen overlay.
      *
      * Called once after the service is bound. The coroutine is automatically cancelled
@@ -346,8 +385,8 @@ class MainActivity : AppCompatActivity() {
     private fun observeOverlayState() {
         val svc = service ?: return
         lifecycleScope.launch {
-            svc.airPlayState.collectLatest { state ->
-                currentAirPlayState = state
+            svc.activeConnection.collectLatest { connection ->
+                currentActiveConnection = connection
                 updateOverlay()
             }
         }
@@ -378,10 +417,12 @@ class MainActivity : AppCompatActivity() {
         when {
             // PIN pairing (access control) happens before streaming — show the code over everything.
             pin != null -> showPinScreen(pin)
+            // A newly active Miracast video must not remain hidden behind stale AirPlay audio UI.
+            isMiracastVideoActive(currentActiveConnection) -> showStreamingScreen()
             // Audio-only AirPlay (system audio, Music, podcasts): show the now-playing card instead
             // of the black video surface. Set whenever audio plays without video.
             nowPlaying != null -> showNowPlayingScreen(nowPlaying)
-            currentAirPlayState == ProtocolState.CONNECTED -> showStreamingScreen()
+            currentActiveConnection != null -> showStreamingScreen()
             photoFrame != null -> showPhotoScreen(photoFrame)
             else -> hideStreamingScreen()
         }
@@ -395,6 +436,7 @@ class MainActivity : AppCompatActivity() {
         nowPlayingScreen.visibility = View.GONE
         pinScreen.visibility = View.VISIBLE
         streamingContainer.visibility = View.VISIBLE
+        streamingContainer.keepScreenOn = false
         streamingContainer.bringToFront()
     }
 }

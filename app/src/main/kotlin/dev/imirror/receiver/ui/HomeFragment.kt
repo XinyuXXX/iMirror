@@ -16,6 +16,7 @@ import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import dev.imirror.receiver.R
+import dev.imirror.receiver.service.ActiveConnection
 import dev.imirror.receiver.service.MirrorService
 import dev.imirror.receiver.service.Protocol
 import dev.imirror.receiver.service.ProtocolState
@@ -43,6 +44,7 @@ class HomeFragment : Fragment() {
     // Service binding — gives direct access to MirrorService StateFlows
     private var service: MirrorService? = null
     private var isBound = false
+    private var activeConnection: ActiveConnection? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -64,6 +66,7 @@ class HomeFragment : Fragment() {
     private lateinit var textServiceState: TextView
     private lateinit var dotServiceState: View
     private lateinit var cardAirPlay: View
+    private lateinit var cardMiracast: View
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var btnRestart: Button
@@ -101,6 +104,7 @@ class HomeFragment : Fragment() {
         textServiceState = view.findViewById(R.id.text_service_state)
         dotServiceState  = view.findViewById(R.id.dot_service_state)
         cardAirPlay      = view.findViewById(R.id.card_airplay)
+        cardMiracast     = view.findViewById(R.id.card_miracast)
         btnStart         = view.findViewById(R.id.btn_start)
         btnStop          = view.findViewById(R.id.btn_stop)
         btnRestart       = view.findViewById(R.id.btn_restart)
@@ -111,7 +115,8 @@ class HomeFragment : Fragment() {
      * The dynamic parts (state, detail text) are updated when service state changes.
      */
     private fun configureProtocolCards() {
-        setupCard(cardAirPlay,   R.drawable.ic_airplay,  R.string.protocol_airplay)
+        setupCard(cardAirPlay,   R.drawable.ic_airplay,   R.string.protocol_airplay)
+        setupCard(cardMiracast,  R.drawable.ic_miracast, R.string.protocol_miracast)
     }
 
     private fun setupCard(card: View, iconRes: Int, nameRes: Int) {
@@ -163,6 +168,16 @@ class HomeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             svc.airPlayState.collectLatest { state -> updateProtocolCard(cardAirPlay, state) }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            svc.miracastState.collectLatest { state -> updateProtocolCard(cardMiracast, state) }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            svc.activeConnection.collectLatest { connection ->
+                activeConnection = connection
+                updateProtocolCard(cardAirPlay, svc.airPlayState.value)
+                updateProtocolCard(cardMiracast, svc.miracastState.value)
+            }
+        }
     }
 
     /**
@@ -198,7 +213,14 @@ class HomeFragment : Fragment() {
         }
 
         stateText.setText(stateRes)
-        detail.setText(detailRes)
+        if (state == ProtocolState.CONNECTED) {
+            val protocol = if (card === cardAirPlay) Protocol.AIRPLAY else Protocol.MIRACAST
+            val sender = activeConnection?.takeIf { it.protocol == protocol }?.senderName
+            detail.text = sender?.let { getString(R.string.protocol_detail_connected, it) }
+                ?: getString(R.string.protocol_detail_waiting)
+        } else {
+            detail.setText(detailRes)
+        }
         dot.background.setTint(requireContext().getColor(colorRes))
     }
 }

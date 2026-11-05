@@ -11,6 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0-beta.1] - 2026-11-05
+
+### Added
+
+- No-root Miracast/Wi-Fi Display receiver adapted from weekdayjast/MiracastReceiver v1.2.11 (MIT), with Wi-Fi Direct, WFD RTSP M1–M7, RTP/MPEG-TS, H.264 video and AAC/LPCM audio.
+- Miracast enable/disable setting, Home status card, runtime Wi-Fi Direct permissions and shared Surface rendering without a separate player Activity.
+- Unified last-wins handoff: a newly connecting AirPlay or Miracast sender takes over after the previous sender's media pipeline stops.
+- Unit tests for TS demuxing, WFD negotiation, lifecycle cleanup and two-way protocol handoff.
+
+### Fixed
+
+- Avoid the optional `low-latency` MediaCodec key below Android 11; this fixes Huawei Pura X / HarmonyOS 7 video on the Sony KD-65X9500H MTK decoder, which otherwise rejects `configure()`.
+- Synchronize RTP binding and teardown, prevent decoder creation after release, and release codecs even when `stop()` fails.
+- Reject non-2xx or mismatched WFD SETUP/PLAY responses instead of reporting a false connection.
+- Keep the screen awake during active video and prevent stale AirPlay overlays from covering Miracast video.
+
+### Validation scope
+
+- The standalone PoC was verified with a Huawei Pura X / HarmonyOS 7 and Sony KD-65X9500H: H.264 1080p30 video and AAC audio worked without root.
+- This beta's integrated two-way handoff still needs broader device and long-running validation. HDCP/DRM-protected Miracast content, UIBC and rooted WFD injection are not included.
+
+---
+
 ## [1.0.0-beta.1] - 2026-06-14
 
 ### Added

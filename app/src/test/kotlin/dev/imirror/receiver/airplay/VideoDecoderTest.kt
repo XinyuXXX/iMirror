@@ -1,6 +1,11 @@
 package dev.imirror.receiver.airplay
 
+import android.media.MediaCodec
+import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.Runs
+import io.mockk.verify
 import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
@@ -75,6 +80,22 @@ class VideoDecoderTest {
      *
      * Basic smoke test to ensure the constructor doesn't fail.
      */
+    @Test
+    fun `release still releases codec when stop throws`() {
+        val codec = mockk<MediaCodec>()
+        every { codec.stop() } throws IllegalStateException("already stopped")
+        every { codec.release() } just Runs
+        VideoDecoder::class.java.getDeclaredField("mediaCodec").apply {
+            isAccessible = true
+            set(videoDecoder, codec)
+        }
+
+        videoDecoder.release()
+
+        verify(exactly = 1) { codec.stop() }
+        verify(exactly = 1) { codec.release() }
+    }
+
     @Test
     fun `VideoDecoder is created successfully`() {
         assertNotNull(videoDecoder)

@@ -78,3 +78,18 @@ data class ActiveConnection(
 enum class Protocol {
     AIRPLAY, MIRACAST, CAST
 }
+
+/**
+ * Applies one protocol's state without letting an idle/error callback clear another
+ * protocol's active session. A CONNECTED event replaces the previous owned session.
+ */
+internal fun ActiveConnection?.afterProtocolState(
+    protocol: Protocol,
+    state: ProtocolState,
+    senderName: String
+): ActiveConnection? = when (state) {
+    ProtocolState.CONNECTED -> ActiveConnection(senderName, protocol)
+    ProtocolState.ADVERTISING,
+    ProtocolState.DISABLED,
+    ProtocolState.ERROR -> if (this?.protocol == protocol) null else this
+}

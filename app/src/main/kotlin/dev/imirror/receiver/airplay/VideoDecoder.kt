@@ -271,10 +271,16 @@ class VideoDecoder(private val outputSurface: Surface) {
     fun release() {
         Logger.d("Releasing VideoDecoder")
         try {
-            mediaCodec?.stop()
-            mediaCodec?.release()
-        } catch (e: Exception) {
-            Logger.e("Error releasing MediaCodec (non-fatal)", e)
+            try {
+                mediaCodec?.stop()
+            } catch (e: Exception) {
+                Logger.e("Error stopping MediaCodec (non-fatal)", e)
+            }
+            try {
+                mediaCodec?.release()
+            } catch (e: Exception) {
+                Logger.e("Error releasing MediaCodec (non-fatal)", e)
+            }
         } finally {
             mediaCodec = null
             isInitialized = false

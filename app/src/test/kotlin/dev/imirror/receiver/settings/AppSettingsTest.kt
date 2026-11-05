@@ -34,6 +34,11 @@ class AppSettingsTest {
     }
 
     @Test
+    fun `default settings have Miracast enabled`() {
+        assertTrue(AppSettings.DEFAULT.miracastEnabled)
+    }
+
+    @Test
     fun `default settings have pin auth disabled`() {
         assertFalse(AppSettings.DEFAULT.airPlayPinAuthEnabled)
     }
@@ -89,8 +94,14 @@ class AppSettingsTest {
 
     @Test
     fun `anyProtocolEnabled is false when AirPlay is disabled`() {
-        val settings = AppSettings(airPlayEnabled = false)
+        val settings = AppSettings(airPlayEnabled = false, miracastEnabled = false)
         assertFalse(settings.anyProtocolEnabled)
+    }
+
+    @Test
+    fun `anyProtocolEnabled is true when only Miracast is enabled`() {
+        val settings = AppSettings(airPlayEnabled = false, miracastEnabled = true)
+        assertTrue(settings.anyProtocolEnabled)
     }
 
     // ─── copy() and equality ──────────────────────────────────────────────────

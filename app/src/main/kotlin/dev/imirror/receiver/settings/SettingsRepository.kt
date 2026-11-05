@@ -107,6 +107,7 @@ class SettingsRepository(private val context: Context) {
     private fun Preferences.toAppSettings(): AppSettings = AppSettings(
         displayName        = this[Keys.DISPLAY_NAME]            ?: "Pratik AirPlay",
         airPlayEnabled     = this[Keys.AIRPLAY_ENABLED]         ?: true,
+        miracastEnabled    = this[Keys.MIRACAST_ENABLED]        ?: true,
         airPlayPinAuthEnabled = this[Keys.AIRPLAY_PIN_AUTH]     ?: false,
         startOnBoot        = this[Keys.START_ON_BOOT]           ?: false,
         showDebugOverlay   = this[Keys.SHOW_DEBUG_OVERLAY]      ?: false,
@@ -121,6 +122,7 @@ class SettingsRepository(private val context: Context) {
     private fun MutablePreferences.fromAppSettings(settings: AppSettings) {
         this[Keys.DISPLAY_NAME]         = settings.displayName
         this[Keys.AIRPLAY_ENABLED]      = settings.airPlayEnabled
+        this[Keys.MIRACAST_ENABLED]     = settings.miracastEnabled
         this[Keys.AIRPLAY_PIN_AUTH]     = settings.airPlayPinAuthEnabled
         this[Keys.START_ON_BOOT]        = settings.startOnBoot
         this[Keys.SHOW_DEBUG_OVERLAY]   = settings.showDebugOverlay
@@ -137,6 +139,7 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val DISPLAY_NAME        = stringPreferencesKey("display_name")
         val AIRPLAY_ENABLED     = booleanPreferencesKey("airplay_enabled")
+        val MIRACAST_ENABLED    = booleanPreferencesKey("miracast_enabled")
         val AIRPLAY_PIN_AUTH    = booleanPreferencesKey("airplay_pin_auth")
         val START_ON_BOOT       = booleanPreferencesKey("start_on_boot")
         val SHOW_DEBUG_OVERLAY  = booleanPreferencesKey("show_debug_overlay")

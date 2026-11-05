@@ -36,6 +36,9 @@ data class AppSettings(
      */
     val airPlayEnabled: Boolean = true,
 
+    /** Whether the no-root Miracast/Wi-Fi Display receiver is enabled. */
+    val miracastEnabled: Boolean = true,
+
     // ─── AirPlay specific ──────────────────────────────────────────────────
     /**
      * Whether AirPlay connections require PIN authentication.
@@ -96,7 +99,7 @@ data class AppSettings(
      * If disabled, the service has nothing to do.
      */
     val anyProtocolEnabled: Boolean
-        get() = airPlayEnabled
+        get() = airPlayEnabled || miracastEnabled
 
     companion object {
         /** The default settings instance used on first launch. */

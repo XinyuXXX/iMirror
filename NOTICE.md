@@ -58,8 +58,8 @@ is redistributable under GPL-3.0 with this attribution preserved.
 
 **Changes made from upstream:**
 
-- Removed the Miracast and Google Cast receiver stacks entirely, along with the
-  Google Cast SDK dependency, Wi-Fi P2P permission, and both location permissions.
+- Removed the original Miracast and Google Cast receiver stacks and the Google Cast
+  SDK dependency. The current, separately adapted Miracast stack is attributed below.
 - Collapsed the `googletv` / `firetv` product flavors into a single universal variant.
 - Fixed an mDNS registration bug: `_airplay._tcp` and `_raop._tcp` were registered
   concurrently, and Android's `NsdManager` silently dropped one of them with no
@@ -70,7 +70,41 @@ is redistributable under GPL-3.0 with this attribution preserved.
 - Made the app installable on phones and tablets as well as TV devices.
 - Renamed the package namespace to `dev.imirror.receiver`.
 
-## 4. Protocol documentation
+## 4. MiracastReceiver — MIT License
+
+**Location:** `app/src/main/kotlin/dev/imirror/receiver/miracast/`
+**Origin:** <https://github.com/weekdayjast/MiracastReceiver>, tag `v1.2.11`
+**Copyright:** Copyright (c) 2026 weekdayjast
+**License:** MIT
+
+The Wi-Fi Direct/WFD session, RTP/MPEG-TS demuxing and Miracast audio/video
+pipeline are adapted from this project. The iMirror integration uses the existing
+MainActivity/StreamingSurface and VideoDecoder, and omits the upstream root helper,
+player Activity and unrelated protocol stacks.
+
+The MIT notice is retained here as required for these copied and modified files:
+
+```text
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## 5. Protocol documentation
 
 No code was taken from these, but they documented the protocol:
 
@@ -78,7 +112,7 @@ No code was taken from these, but they documented the protocol:
 - [Unofficial AirPlay Protocol Specification](https://nto.github.io/AirPlay.html)
 - [UxPlay](https://github.com/FDH2/UxPlay) — GPL-3.0, consulted as a reference implementation
 
-## 5. Runtime dependencies
+## 6. Runtime dependencies
 
 Retrieved via Gradle, not vendored into this repository:
 

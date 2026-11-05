@@ -2,15 +2,14 @@
 
 <img src="docs/hero.png" alt="iMirror — free AirPlay receiver for Android TV to mirror iPhone, iPad and MacBook screens" width="100%">
 
-# iMirror — AirPlay Screen Mirroring for Android TV
+# iMirror — AirPlay & Miracast Screen Mirroring for Android TV
 
-**Mirror your iPhone, iPad, or MacBook to any Android TV.** No Apple TV, no ads,
-no watermark, no subscription.
+**Mirror your iPhone, iPad, MacBook, or a Miracast-compatible Huawei/Android phone to your Android TV.** No Apple TV, no ads, no watermark, no subscription.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20TV%20%7C%20Google%20TV%20%7C%20Fire%20TV-3ddc84)](#supported-devices)
 [![Android](https://img.shields.io/badge/Android-7.1%2B%20(API%2025)-3ddc84)](#supported-devices)
-[![Download APK](https://img.shields.io/badge/download-APK-5ac8fa)](apk/)
+[![Download APK](https://img.shields.io/badge/download-APK-5ac8fa)](https://github.com/XinyuXXX/iMirror/releases)
 [![Free](https://img.shields.io/badge/price-free%20forever-brightgreen)](#no-ads-no-subscription-no-catch)
 
 </div>
@@ -36,6 +35,7 @@ Apple TV — no extra app on the phone, no account, no cable.
 |---|---|
 | 📱 **iPhone & iPad screen mirroring** | Appears natively in iOS Control Centre → Screen Mirroring |
 | 💻 **MacBook screen mirroring** | Same AirPlay protocol; works from macOS Control Centre |
+| 🤝 **Huawei & Android Miracast** | Native system wireless projection on compatible senders; no sender app required |
 | 🔊 **Audio** | AAC-ELD, AAC-LC and ALAC, with independent A/V start and stop |
 | ▶️ **Video streaming** | YouTube, Photos and other apps that push a stream URL, with play/pause/scrub |
 | 🖼️ **Photos** | Full-screen images sent from the iOS Photos app |
@@ -47,12 +47,16 @@ Apple TV — no extra app on the phone, no account, no cable.
 
 There is no paid tier, no watermark, no resolution cap, and no "upgrade to
 1080p" prompt. The app contains **no billing, advertising, tracking, or analytics
-code whatsoever**, and it never asks for your location. It is GPL-3.0 open source
-— read the code and verify that yourself.
+code whatsoever**. The Miracast source integration uses Android's Wi-Fi Direct
+runtime permission (nearby devices on Android 13+, location on earlier versions);
+it does not read or collect location coordinates. It is GPL-3.0 open source — read
+the code and verify that yourself.
 
 ## Download
 
-Prebuilt, release-signed APKs are committed in **[`apk/`](apk/)** — no build required.
+The latest AirPlay + Miracast beta is available from **[GitHub Releases](https://github.com/XinyuXXX/iMirror/releases)**.
+
+Prebuilt, release-signed APKs from earlier versions are also committed in **[`apk/`](apk/)** — no build required.
 
 | Your device | Download |
 |---|---|
@@ -70,7 +74,7 @@ Enable **Developer options → USB debugging** on the TV, then from a computer:
 
 ```sh
 adb connect <your-tv-ip>
-adb install -r iMirror-1.0.0-universal.apk
+adb install -r iMirror-1.1.0-beta.1-universal.apk
 ```
 
 No computer? Use a sideloading app such as *Downloader* or *Send Files to TV* to
@@ -83,6 +87,8 @@ Open iMirror on the TV and leave it on the waiting screen. Then:
 **From iPhone or iPad** — swipe into Control Centre → **Screen Mirroring** → pick your TV.
 
 **From a MacBook or iMac** — Control Centre → **Screen Mirroring** → pick your TV.
+
+**From a compatible Huawei/Android phone** — open the system **Wireless projection / 无线投屏** panel and pick your TV. Miracast uses Wi-Fi Direct; no sender app is required. A new sender takes over from the previous one (last-wins).
 
 <div align="center">
 
@@ -107,15 +113,12 @@ devices. Nothing to install on the phone or Mac.
 - **Amazon Fire TV** — sticks and cubes
 - **Phones and tablets** — the same APK installs and runs, handy for testing
 
-Senders: **iPhone**, **iPad**, and **Mac** running macOS 12 or newer.
+Senders: **iPhone**, **iPad**, **Mac** running macOS 12 or newer, and compatible **Huawei/Android Miracast** devices.
 
 ## Known limitations
 
-- **Netflix, Disney+, Apple TV+ will not mirror.** Apple's FairPlay DRM protects
-  these on every AirPlay path. No open-source receiver can decrypt them — this is
-  not a bug and cannot be fixed.
-- **Apple Music in-app audio** is protected the same way. Route your Mac's system
-  audio output instead, which works.
+- **DRM-protected video is not guaranteed.** The Miracast receiver does not implement HDCP; protected content may show a black screen, audio only, or an error. AirPlay behavior depends on the sender app and its content-protection rules.
+- **Miracast discovery depends on TV firmware.** This build has no root helper; devices without an existing usable WFD/P2P sink path may not be discoverable.
 - **Same network required.** Apple TV can accept connections off-network via
   Apple's AWDL protocol; Android hardware cannot do AWDL.
 - **H.264 only** — HEVC is not implemented yet.
@@ -127,7 +130,7 @@ Senders: **iPhone**, **iPad**, and **Mac** running macOS 12 or newer.
 Requires JDK 17+, and an Android SDK with NDK `28.2.13676358` and CMake 3.22.1.
 
 ```sh
-git clone https://github.com/prat3ik/iMirror.git
+git clone https://github.com/XinyuXXX/iMirror.git
 cd iMirror
 ./gradlew assembleDebug
 ```

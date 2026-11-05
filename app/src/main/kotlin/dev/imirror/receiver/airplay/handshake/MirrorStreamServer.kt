@@ -6,7 +6,9 @@ import dev.imirror.receiver.airplay.VideoDecoder
 import dev.imirror.receiver.util.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
@@ -49,6 +51,7 @@ class MirrorStreamServer(
     @Volatile private var running = false
     @Volatile private var client: Socket? = null
     @Volatile private var decoder: VideoDecoder? = null   // owned by the decoder thread
+    private var decoderJob: Job? = null
     private var lastSps: ByteArray? = null
     private var lastPps: ByteArray? = null
     // The Surface the current decoder was built against. The SurfaceView destroys its Surface when
@@ -69,14 +72,19 @@ class MirrorStreamServer(
     fun start(scope: CoroutineScope) {
         running = true
         scope.launch(Dispatchers.IO) { runReader() }
-        scope.launch(Dispatchers.IO) { runDecoder() }
+        decoderJob = scope.launch(Dispatchers.IO) { runDecoder() }
     }
 
+    @Synchronized
     fun stop() {
         running = false
         runCatching { client?.close() }
         runCatching { serverSocket.close() }
         queue.clear()
+        val currentDecoderJob = decoderJob
+        decoderJob = null
+        // Last-wins handoff must not return while the old AirPlay codec is still alive.
+        runBlocking { currentDecoderJob?.join() }
         Logger.i("MirrorStreamServer stopped")
     }
 

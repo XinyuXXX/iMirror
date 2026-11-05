@@ -143,6 +143,16 @@ open class RtspHandler(
         }
     }
 
+    /**
+     * Closes only the current sender connection. The listening socket and mDNS stay alive;
+     * handleClient's existing finally path performs media cleanup and re-advertising.
+     */
+    open fun closeCurrentSession(): Boolean {
+        val client = activeClient ?: return false
+        runCatching { client.close() }
+        return true
+    }
+
     /** Stops the RTSP server. */
     fun stop() {
         running = false
@@ -259,14 +269,19 @@ open class RtspHandler(
         } finally {
             Logger.i("Client disconnected")
             socket.close()
-            activeClient = null
             currentSession = null
             pairingSession = null
             fairPlay = null
             isMirrorSession = false
             activeStreamTypes.clear()
             setupCount = 0
-            onStreamingStopped()
+            try {
+                onStreamingStopped()
+            } finally {
+                // Keep the closed client visible until cleanup completes so a last-wins handoff
+                // can wait for onStreamingStopped instead of configuring the new codec too early.
+                activeClient = null
+            }
         }
     }
 

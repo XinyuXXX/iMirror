@@ -19,6 +19,8 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * AirPlayReceiver — Top-level orchestrator for the AirPlay 2 receiver pipeline.
@@ -91,7 +93,9 @@ class AirPlayReceiver(
      */
     private val onNowPlayingChanged: (NowPlayingInfo?) -> Unit = {},
     /** Pairing PIN to show ([pin]) or hide (null) on the TV during SRP pair-setup. */
-    private val onPinChanged: (pin: String?) -> Unit = {}
+    private val onPinChanged: (pin: String?) -> Unit = {},
+    /** Last-wins hook: release an older Miracast media session before creating AirPlay media. */
+    private val onSessionStarting: () -> Unit = {}
 ) {
 
     // Persistent store of paired controllers (for PIN access control / pair-verify).
@@ -122,6 +126,8 @@ class AirPlayReceiver(
     @Volatile private var ntpClient: AirPlayNtpClient? = null
     @Volatile private var eventSocket: ServerSocket? = null
     @Volatile private var eventClientSocket: java.net.Socket? = null
+    private val disconnectLock = Any()
+    private var disconnectCompletion: CountDownLatch? = null
     @Volatile private var mirrorAesKey: ByteArray? = null
     @Volatile private var mirrorEcdhSecret: ByteArray? = null
     @Volatile private var mirrorAesIv: ByteArray? = null
@@ -180,7 +186,27 @@ class AirPlayReceiver(
             Logger.e("Error during AirPlayReceiver stop", e)
         } finally {
             scope.cancel()
+            signalDisconnectCompletion()
         }
+    }
+
+    /**
+     * Closes the current AirPlay sender and waits for RtspHandler's existing cleanup callback.
+     * The RTSP listener and mDNS advertisement remain available for subsequent connections.
+     */
+    @Synchronized
+    fun disconnectActiveSender(): Boolean {
+        val handler = rtspHandler ?: return true
+        val completion = CountDownLatch(1)
+        synchronized(disconnectLock) { disconnectCompletion = completion }
+        if (!handler.closeCurrentSession()) {
+            synchronized(disconnectLock) { disconnectCompletion = null }
+            return true
+        }
+        val cleanedUp = completion.await(5, TimeUnit.SECONDS)
+        synchronized(disconnectLock) { disconnectCompletion = null }
+        if (!cleanedUp) Logger.w("AirPlay sender disconnect timed out during last-wins handoff")
+        return cleanedUp
     }
 
     /**
@@ -265,6 +291,7 @@ class AirPlayReceiver(
         Logger.i("Streaming started — video=${session.hasVideo} audio=${session.hasAudio} " +
                  "audioOnly=${session.isAudioOnly}")
 
+        onSessionStarting()
         scope.launch {
             try {
                 if (session.hasVideo) startVideoDecoder(session)
@@ -304,6 +331,12 @@ class AirPlayReceiver(
                 Logger.e("Failed to restart mDNS after streaming", e)
             }
         }
+        signalDisconnectCompletion()
+    }
+
+    private fun signalDisconnectCompletion() {
+        val completion = synchronized(disconnectLock) { disconnectCompletion }
+        completion?.countDown()
     }
 
     // ─── Private: media pipeline ──────────────────────────────────────────────
@@ -415,6 +448,7 @@ class AirPlayReceiver(
         remoteAddress: java.net.InetAddress,
         senderTimingPort: Int,
     ): Pair<Int, Int> {
+        onSessionStarting()
         mirrorAesKey = aesKey
         mirrorEcdhSecret = ecdhSecret
         mirrorAesIv = aesIv
@@ -495,6 +529,7 @@ class AirPlayReceiver(
      * [AirPlayVideoPlayer], which fetches + plays it via MediaPlayer onto the same Surface.
      */
     private fun startUrlVideo(url: String, startFraction: Double) {
+        onSessionStarting()
         onSenderNameChanged("AirPlay")
         emitState(ProtocolState.CONNECTED)   // shows StreamingScreen → Surface becomes available
         val player = urlVideoPlayer ?: AirPlayVideoPlayer(

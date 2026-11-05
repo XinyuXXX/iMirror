@@ -1,5 +1,7 @@
 package dev.imirror.receiver
 
+import dev.imirror.receiver.service.ActiveConnection
+import dev.imirror.receiver.service.Protocol
 import dev.imirror.receiver.service.ProtocolState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -111,5 +113,30 @@ class MainActivityTest {
         // Simulate onStop: clear the provider
         provider = { null }
         assertNull(provider.invoke())
+    }
+
+    @Test
+    fun `active Miracast video is identified for overlay priority`() {
+        val connection = ActiveConnection("Phone", Protocol.MIRACAST, 1_000L)
+        assertTrue(MainActivity.isMiracastVideoActive(connection))
+    }
+
+    @Test
+    fun `AirPlay connection does not trigger Miracast overlay priority`() {
+        val connection = ActiveConnection("Mac", Protocol.AIRPLAY, 1_000L)
+        assertFalse(MainActivity.isMiracastVideoActive(connection))
+        assertFalse(MainActivity.isMiracastVideoActive(null))
+    }
+
+    @Test
+    fun `notification-only permission result does not restart receivers`() {
+        assertFalse(MainActivity.shouldRestartForMiracastPermissionChange(false, true))
+        assertFalse(MainActivity.shouldRestartForMiracastPermissionChange(false, false))
+    }
+
+    @Test
+    fun `Miracast permission recovery restarts only after missing permissions are granted`() {
+        assertTrue(MainActivity.shouldRestartForMiracastPermissionChange(true, true))
+        assertFalse(MainActivity.shouldRestartForMiracastPermissionChange(true, false))
     }
 }

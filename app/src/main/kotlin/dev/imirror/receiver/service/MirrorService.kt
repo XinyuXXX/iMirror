@@ -15,6 +15,8 @@ import dev.imirror.receiver.MainActivity
 import dev.imirror.receiver.R
 import android.view.Surface
 import dev.imirror.receiver.airplay.AirPlayReceiver
+import dev.imirror.receiver.airplay.StreamStats
+import dev.imirror.receiver.miracast.MiracastReceiver
 import dev.imirror.receiver.settings.AppSettings
 import dev.imirror.receiver.settings.SettingsRepository
 import dev.imirror.receiver.util.Logger
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * MirrorService — Android ForegroundService that hosts all receiver protocols.
@@ -63,6 +66,9 @@ class MirrorService : Service() {
     private val _airPlayState = MutableStateFlow(ProtocolState.DISABLED)
     val airPlayState: StateFlow<ProtocolState> = _airPlayState.asStateFlow()
 
+    private val _miracastState = MutableStateFlow(ProtocolState.DISABLED)
+    val miracastState: StateFlow<ProtocolState> = _miracastState.asStateFlow()
+
     private val _activeConnection = MutableStateFlow<ActiveConnection?>(null)
     val activeConnection: StateFlow<ActiveConnection?> = _activeConnection.asStateFlow()
 
@@ -82,8 +88,9 @@ class MirrorService : Service() {
     // setVideoSurfaceProvider() is called after startAirPlay().
     @Volatile private var videoSurfaceProvider: (() -> Surface?)? = null
 
-    // Receiver instance — null when not running
+    // Receiver instances — null when not running
     private var airPlayReceiver: AirPlayReceiver? = null
+    private var miracastReceiver: MiracastReceiver? = null
 
     // Settings — read once when starting, re-read on restart
     private lateinit var settingsRepository: SettingsRepository
@@ -168,12 +175,17 @@ class MirrorService : Service() {
      */
     private suspend fun startReceivers() {
         val settings = settingsRepository.settingsFlow.first()
-        Logger.i("Starting receiver: AirPlay=${settings.airPlayEnabled}")
+        Logger.i("Starting receivers: AirPlay=${settings.airPlayEnabled} Miracast=${settings.miracastEnabled}")
+        StreamStats.overlayEnabled = settings.showDebugOverlay
 
         _serviceState.value = ServiceState.Running
-        updateNotification(isRunning = true)
+        if (!settings.airPlayEnabled) _airPlayState.value = ProtocolState.DISABLED
+        if (!settings.miracastEnabled) _miracastState.value = ProtocolState.DISABLED
+        updateNotification(isRunning = settings.anyProtocolEnabled)
 
         if (settings.airPlayEnabled) startAirPlay(settings)
+        // Match the verified PoC: Sony/MTK's P2P implementation is started from the main thread.
+        if (settings.miracastEnabled) withContext(Dispatchers.Main) { startMiracast(settings) }
     }
 
     /**
@@ -216,9 +228,6 @@ class MirrorService : Service() {
      * @param settings Current app settings; read once per start/restart cycle.
      */
     private fun startAirPlay(settings: AppSettings) {
-        // Mirror the debug-overlay setting into the shared stats bus that StreamingScreen reads.
-        dev.imirror.receiver.airplay.StreamStats.overlayEnabled = settings.showDebugOverlay
-
         // Idempotent: a redundant ACTION_START (e.g. the activity being recreated while the
         // foreground service is still alive) must NOT spin up a second AirPlayReceiver competing
         // for port 7000. The existing receiver keeps running and picks up the new Surface via the
@@ -261,32 +270,97 @@ class MirrorService : Service() {
             onPinChanged = { pin ->
                 _pairingPin.value = pin
             },
+            onSessionStarting = { prepareForAirPlayConnection() },
             onStateChanged = { state ->
                 _airPlayState.value = state
-                when (state) {
-                    ProtocolState.CONNECTED   -> {
-                        _photoFrame.value = null
-                        _activeConnection.value =
-                            ActiveConnection(pendingSenderName, Protocol.AIRPLAY)
-                        updateNotification(isRunning = true, streamingSenderName = pendingSenderName)
-                    }
-                    ProtocolState.ADVERTISING,
-                    ProtocolState.DISABLED,
-                    ProtocolState.ERROR       -> {
-                        _activeConnection.value = null
-                        updateNotification(isRunning = state != ProtocolState.DISABLED &&
-                                                       state != ProtocolState.ERROR)
-                    }
-                }
+                if (state == ProtocolState.CONNECTED) _photoFrame.value = null
+                onProtocolConnectionState(Protocol.AIRPLAY, state, pendingSenderName)
             }
         ).also { it.start() }
         Logger.d("AirPlay receiver started (displayName='${settings.effectiveDisplayName}')")
     }
 
+    private fun startMiracast(settings: AppSettings) {
+        if (miracastReceiver != null) {
+            Logger.i("Miracast receiver already running — skipping duplicate start")
+            return
+        }
+        miracastReceiver = MiracastReceiver(
+            context = applicationContext,
+            displayName = settings.effectiveDisplayName,
+            videoSurfaceProvider = { videoSurfaceProvider?.invoke() },
+            canAcceptConnection = { prepareForMiracastConnection() },
+            onStateChanged = { state ->
+                _miracastState.value = state
+                onProtocolConnectionState(Protocol.MIRACAST, state, "Miracast")
+            }
+        ).also { it.start() }
+        Logger.d("Miracast receiver started")
+    }
+
+    /** Serializes ownership so two protocols cannot both retain the active video connection. */
+    @Synchronized
+    private fun onProtocolConnectionState(protocol: Protocol, state: ProtocolState, senderName: String) {
+        val current = _activeConnection.value
+        if (state == ProtocolState.CONNECTED && current != null && current.protocol != protocol) {
+            // Fallback for races outside the normal pre-start hooks: the newcomer still wins,
+            // but only after the previous protocol's media pipeline has actually cleaned up.
+            if (protocol == Protocol.AIRPLAY) {
+                miracastReceiver?.disconnectSenderAndWait()
+            } else if (airPlayReceiver?.disconnectActiveSender() == false) {
+                Logger.w("Miracast handoff aborted because old AirPlay media did not clean up")
+                _miracastState.value = ProtocolState.ADVERTISING
+                miracastReceiver?.disconnectSender()
+                return
+            }
+            clearTransientOverlays()
+        }
+
+        _activeConnection.value = current.afterProtocolState(protocol, state, senderName)
+        val active = _activeConnection.value
+        updateNotification(
+            isRunning = hasRunningProtocol(),
+            streamingSenderName = active?.senderName
+        )
+    }
+
+    /** Miracast is the newcomer: close and clean up AirPlay before binding RTP/decoder resources. */
+    private fun prepareForMiracastConnection(): Boolean {
+        if (_activeConnection.value?.protocol == Protocol.AIRPLAY &&
+            airPlayReceiver?.disconnectActiveSender() == false
+        ) {
+            return false
+        }
+        clearTransientOverlays()
+        return true
+    }
+
+    /** AirPlay calls this before constructing any new media pipeline. */
+    private fun prepareForAirPlayConnection() {
+        miracastReceiver?.disconnectSenderAndWait()
+        clearTransientOverlays()
+    }
+
+    private fun clearTransientOverlays() {
+        _photoFrame.value = null
+        _nowPlaying.value = null
+        _pairingPin.value = null
+    }
+
+    private fun hasRunningProtocol(): Boolean =
+        _airPlayState.value == ProtocolState.ADVERTISING ||
+            _airPlayState.value == ProtocolState.CONNECTED ||
+            _miracastState.value == ProtocolState.ADVERTISING ||
+            _miracastState.value == ProtocolState.CONNECTED
+
     private fun stopAllReceiversInternal() {
         try { airPlayReceiver?.stop() } catch (e: Exception) { Logger.e("AirPlay stop error", e) }
+        try { miracastReceiver?.stop() } catch (e: Exception) { Logger.e("Miracast stop error", e) }
         airPlayReceiver = null
+        miracastReceiver = null
         _airPlayState.value = ProtocolState.DISABLED
+        _miracastState.value = ProtocolState.DISABLED
+        _activeConnection.value = null
         _photoFrame.value = null
         _nowPlaying.value = null
         _pairingPin.value = null
