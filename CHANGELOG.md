@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0-beta.2] - 2026-11-05
+
+### Changed
+
+- Default sender-visible receiver name is now `iMirror`; removed the previous hard-coded personal name from current source.
+- Home now reads the configured display name instead of always showing the Android device model.
+
+### Fixed
+
+- Prevent mDNS listener/generation leaks across repeated restarts and protocol handoff. AirPlay and RAOP unregister independently, and late callbacks can no longer register services after stop.
+- Fixed the stale default-name unit test; the full JVM suite now passes.
+
+---
+
 ## [1.1.0-beta.1] - 2026-11-05
 
 ### Added

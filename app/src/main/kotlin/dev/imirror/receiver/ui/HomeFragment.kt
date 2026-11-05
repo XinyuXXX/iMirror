@@ -22,6 +22,7 @@ import dev.imirror.receiver.service.Protocol
 import dev.imirror.receiver.service.ProtocolState
 import dev.imirror.receiver.service.ServiceController
 import dev.imirror.receiver.service.ServiceState
+import dev.imirror.receiver.settings.SettingsRepository
 import dev.imirror.receiver.util.Logger
 import dev.imirror.receiver.util.NetworkUtils
 import kotlinx.coroutines.flow.collectLatest
@@ -79,7 +80,7 @@ class HomeFragment : Fragment() {
         bindViews(view)
         configureProtocolCards()
         configureButtons()
-        showDeviceName()
+        observeDisplayName()
     }
 
     override fun onStart() {
@@ -147,9 +148,16 @@ class HomeFragment : Fragment() {
      * Shows the device's AirPlay name on the HomeScreen so the user knows
      * what to look for in their sender's picker.
      */
-    private fun showDeviceName() {
-        val name = NetworkUtils.getDeviceName(requireContext())
-        textDeviceName.text = getString(R.string.home_device_visible_as, name)
+    private fun observeDisplayName() {
+        val repository = SettingsRepository(requireContext().applicationContext)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.settingsFlow.collectLatest { settings ->
+                val name = settings.effectiveDisplayName.ifEmpty {
+                    NetworkUtils.getDeviceName(requireContext())
+                }
+                textDeviceName.text = getString(R.string.home_device_visible_as, name)
+            }
+        }
     }
 
     // ─── State Observation ───────────────────────────────────────────────────

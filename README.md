@@ -74,7 +74,7 @@ Enable **Developer options → USB debugging** on the TV, then from a computer:
 
 ```sh
 adb connect <your-tv-ip>
-adb install -r iMirror-1.1.0-beta.1-universal.apk
+adb install -r iMirror-1.1.0-beta.2-universal.apk
 ```
 
 No computer? Use a sideloading app such as *Downloader* or *Send Files to TV* to

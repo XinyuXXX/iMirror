@@ -24,8 +24,8 @@ class AppSettingsTest {
     // ─── Default values ──────────────────────────────────────────────────────
 
     @Test
-    fun `default settings have empty display name`() {
-        assertEquals("", AppSettings.DEFAULT.displayName)
+    fun `default settings use iMirror display name`() {
+        assertEquals("iMirror", AppSettings.DEFAULT.displayName)
     }
 
     @Test
